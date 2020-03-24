@@ -6,18 +6,32 @@
 * 3. Copy config bundle to CJOC.
 * 4. Create Pipeline Policy on Team Master.
 */
-library 'cb-days@master'
 def masterName = System.properties.'MASTER_NAME'
 def encryptedPAT = new hudson.util.Secret(githubPAT).getEncryptedValue()
 def entrySecret = UUID.randomUUID().toString()
-def podYaml = libraryResource 'podtemplates/kubeDeploy.yml'
-def pipelinePolicy = libraryResource 'pipeline-policies/global-timeout.json'
 
 pipeline {
   agent {
     kubernetes {
       label 'kubectl'
-      yaml podYaml
+      yaml """
+kind: Pod
+metadata:
+  name: kubectl
+spec:
+  serviceAccountName: jenkins
+  containers:
+  - name: kubectl
+    image: gcr.io/cloud-builders/kubectl
+    resources:
+      requests:
+        memory: "500Mi"
+    command:
+    - cat
+    tty: true
+  securityContext:
+    runAsUser: 1000  
+      """
     }
   }
   stages {
@@ -35,14 +49,14 @@ pipeline {
     stage('Create Pipeline Policy') {
       steps {
         echo "preparing to create Pipeline Policy on ${masterName}"
-        writeFile file: "policies.json", text: "${pipelinePolicy}"
+        sh "curl -O https://raw.githubusercontent.com/cloudbees-days/pipeline-library/master/resources/pipeline-policies/global-timeout.json"
         echo "preparing Jenkins CLI for Master restart"
         sh "curl -O http://teams-${masterName}/teams-${masterName}/jnlpJars/jenkins-cli.jar"
         withCredentials([usernamePassword(credentialsId: 'cli-username-token', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
           sh """
             alias cli='java -jar jenkins-cli.jar -s \'http://teams-${masterName}/teams-${masterName}/\' -auth $USERNAME:$PASSWORD'
             echo "Creating global-timeout Pipeline Policy on ${masterName}"
-            cli policies --put < policies.json
+            cli policies --put < global-timeout.json
           """
         }
       }
