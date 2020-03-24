@@ -4,6 +4,7 @@
 *    a. Jenkins credentials for GitHub global config and Pipeline Multibranch projects.
 *    b. GitHub  global config with support for managing webhooks.
 * 3. Copy config bundle to CJOC.
+* 4. Create Pipeline Policy on Team Master.
 */
 library 'cb-days@master'
 def masterName = System.properties.'MASTER_NAME'
@@ -31,6 +32,21 @@ pipeline {
          """)
       }
     }
+    stage('Create Pipeline Policy') {
+      steps {
+        echo "preparing to create Pipeline Policy on ${masterName}"
+        writeFile file: "policies.json", text: "${pipelinePolicy}"
+        echo "preparing Jenkins CLI for Master restart"
+        sh "curl -O http://teams-${masterName}/teams-${masterName}/jnlpJars/jenkins-cli.jar"
+        withCredentials([usernamePassword(credentialsId: 'cli-username-token', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
+          sh """
+            alias cli='java -jar jenkins-cli.jar -s \'http://teams-${masterName}/teams-${masterName}/\' -auth $USERNAME:$PASSWORD'
+            echo "Creating global-timeout Pipeline Policy on ${masterName}"
+            cli policies --put < policies.json
+          """
+        }
+      }
+    }
     stage('Create Config Bundle') {
       steps {
         echo "master name:  ${masterName}"
@@ -53,26 +69,11 @@ pipeline {
           sh "kubectl cp --namespace ${k8sNamespace} ${masterName} cjoc-0:/var/jenkins_home/jcasc-bundles-store/"
           sh "kubectl exec --namespace ${k8sNamespace} cjoc-0 -- sed -i \"/<\\/access>/i\\<entry><string>${masterName}</string><hudson.util.Secret>${entrySecret}</hudson.util.Secret></entry>\"  /var/jenkins_home/jcasc-bundles-store/security.xml"
         }
-        echo "preparing Jenkins CLI for Master restart"
-        sh "curl -O http://teams-${masterName}/teams-${masterName}/jnlpJars/jenkins-cli.jar"
         withCredentials([usernamePassword(credentialsId: 'cli-username-token', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
           sh """
             alias cli='java -jar jenkins-cli.jar -s \'http://cjoc/cjoc/\' -auth $USERNAME:$PASSWORD'
             echo "Reprovision Master ${masterName}"
             cli managed-master-reprovision ${masterName}
-          """
-        }
-      }
-    }
-    stage('Create Pipeline Policy') {
-      steps {
-        echo "preparing to create Pipeline Policy on ${masterName}"
-        writeFile file: "policies.json", text: "${pipelinePolicy}"
-        withCredentials([usernamePassword(credentialsId: 'cli-username-token', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
-          sh """
-            alias cli='java -jar jenkins-cli.jar -s \'http://teams-${masterName}/teams-${masterName}/\' -auth $USERNAME:$PASSWORD'
-            echo "Creating global-timeout Pipeline Policy on ${masterName}"
-            cli policies --put < policies.json
           """
         }
       }
