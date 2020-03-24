@@ -40,6 +40,7 @@ spec:
         echo "GitHub Username:  ${githubUsername}"
         echo "GitHub Organization: ${githubOrg}"
         sh(script: """
+          curl --silent -H "Authorization: token $githubPAT" --data '{"organization":"${githubOrg}"}' https://api.github.com/repos/cloudbees-days/pipeline-library/forks
           curl --silent -H "Authorization: token $githubPAT" --data '{"organization":"${githubOrg}"}' https://api.github.com/repos/cloudbees-days/core-config-bundle/forks
           curl --silent -H "Authorization: token $githubPAT" --data '{"organization":"${githubOrg}"}' https://api.github.com/repos/cloudbees-days/microblog-frontend/forks
           curl --silent -H "Authorization: token $githubPAT" --data '{"organization":"${githubOrg}"}' https://api.github.com/repos/cloudbees-days/microblog-backend/forks
@@ -71,6 +72,7 @@ spec:
             git config user.name "${githubUsername}"
             git remote add origin https://${githubUsername}:${githubPAT}@github.com/${githubOrg}/core-config-bundle.git
             git pull origin master
+            sed -i.bak 's#REPLACE_GITHUB_ORG#${githubOrg}#' jenkins.yaml
             sed -i.bak 's#REPLACE_WITH_JENKINS_ENCODED_PAT#${encryptedPAT}#' jenkins.yaml
             sed -i.bak 's#REPLACE_WITH_YOUR_GITHUB_USERNAME#${githubUsername}#' jenkins.yaml
             git add *
